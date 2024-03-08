@@ -16,3 +16,5 @@
 export * from 'playwright-core';
 import playwright from 'playwright-core';
 export default playwright;
+
+export function createElement() {} // https://github.com/microsoft/playwright/issues/26824 TODO: Maybe create proxy which returns this from react instead? It should be React.createElement

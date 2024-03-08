@@ -19,10 +19,32 @@ import url from 'url';
 import { addToCompilationCache, currentFileDepsCollector, serializeCompilationCache, startCollectingFileDeps, stopCollectingFileDeps } from './compilationCache';
 import { transformHook, resolveHook, setTransformConfig, shouldTransform } from './transform';
 import { PortTransport } from './portTransport';
+import fs2 from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
+
+
+
+const endsWith = ['scss', 'svg', 'png', 'css']
+
 
 // Node < 18.6: defaultResolve takes 3 arguments.
 // Node >= 18.6: nextResolve from the chain takes 2 arguments.
 async function resolve(specifier: string, context: { parentURL?: string }, defaultResolve: Function) {
+  if(specifier?.endsWith('/node_modules/playwright')) {
+    specifier = specifier.replace('/node_modules/playwright', '/node_modules/playwright/index.mjs')
+  }
+
+  // Continue as usual if the format is not scss, svg, or png.
+  if (specifier && endsWith.some((e) => specifier.endsWith(e))) {
+    // If the format is scss, svg, or png, load the file as scss
+    const nextResult = await defaultResolve(specifier, context, defaultResolve)
+    return {
+      format: 'scss',
+      shortCircuit: true,
+      url: nextResult.url,
+    }
+  }
+
   if (context.parentURL && context.parentURL.startsWith('file://')) {
     const filename = url.fileURLToPath(context.parentURL);
     const resolved = resolveHook(filename, specifier);
@@ -41,6 +63,18 @@ async function resolve(specifier: string, context: { parentURL?: string }, defau
 // Node < 18.6: defaultLoad takes 3 arguments.
 // Node >= 18.6: nextLoad from the chain takes 2 arguments.
 async function load(moduleUrl: string, context: { format?: string }, defaultLoad: Function) {
+  if (context?.format && endsWith.some((e) => context.format === e)) {
+
+    // If the format is scss, svg, or png, load the file as JSON
+    const rawSource = '' + (await fs2.readFile(fileURLToPath(moduleUrl)))
+
+    return {
+      format: 'json',
+      shortCircuit: true,
+      source: JSON.stringify(rawSource),
+    }
+  }
+
   // Bail out for wasm, json, etc.
   // non-js files have context.format === undefined
   if (context.format !== 'commonjs' && context.format !== 'module' && context.format !== undefined)
